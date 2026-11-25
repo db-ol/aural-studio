@@ -4,7 +4,7 @@ ABRSM 钢琴五级、七级和八级现场考试的听觉备考网站。默认�
 
 ## GitHub Pages
 
-手机和电脑都可以访问[在线练习室](https://db-ol.github.io/grade5-aural/)。首次使用麦克风时，请允许浏览器访问麦克风。
+手机和电脑都可以访问[在线练习室](https://db-ol.github.io/aural-studio/)。首次使用麦克风时，请允许浏览器访问麦克风。
 
 仓库使用 `main` 分支的根目录作为 Pages 发布源。推送后由 GitHub Pages 自动更新网站，无需安装依赖或编译。
 
