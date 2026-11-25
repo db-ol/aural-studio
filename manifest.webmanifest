@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Aural Studio（听觉练习室）",
   "short_name": "听觉练习室",
-  "description": "ABRSM 钢琴五级听力练习与模拟测试。",
+  "description": "ABRSM 钢琴五级、七级和八级听觉练习与模拟测试。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",

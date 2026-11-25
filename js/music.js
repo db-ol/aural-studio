@@ -93,6 +93,97 @@
   const sightPaths = sight();
   const sightKeys = keys.filter(k => !k[4] && Math.abs(k[3]) <= 2);
 
+  const advancedSightKeys = [...keys, ['E', 64, 30, 4], ['A♭', 56, 26, -4],
+    ['C♯', 61, 28, 4, true], ['F', 65, 31, -4, true]];
+
+  // Each voice has four complete bars of scale degrees and quarter-note durations.
+  const ensemblePhrases = [
+    {
+      metre: 3,
+      low: [[[0,1],[2,.5],[1,.5],[0,1]], [[3,1],[2,1],[1,1]], [[4,1.5],[3,.5],[1,1]], [[4,1],[0,2]]],
+      middle: [[[9,1.5],[8,.5],[7,1]], [[7,2],[8,1]], [[8,1],[7,1],[6,1]], [[8,1],[7,2]]],
+      high: [[[11,2],[9,1]], [[12,1],[11,.5],[10,.5],[10,1]], [[13,1],[12,1],[11,1]], [[11,1],[9,2]]]
+    }, {
+      metre: 4,
+      low: [[[0,2],[1,1],[2,1]], [[3,1.5],[2,.5],[1,2]], [[2,1],[3,1],[4,2]], [[1,1],[4,1],[0,2]]],
+      middle: [[[9,1],[8,.5],[7,.5],[6,1],[7,1]], [[7,1],[9,1],[8,2]], [[7,1.5],[8,.5],[6,2]], [[8,1],[6,1],[7,2]]],
+      high: [[[11,1.5],[12,.5],[13,1],[11,1]], [[12,2],[10,1],[12,1]], [[11,1],[12,1],[13,2]], [[10,1],[11,1],[9,2]]]
+    }, {
+      metre: 2,
+      low: [[[2,.5],[1,.5],[0,1]], [[3,1],[5,1]], [[4,.5],[3,.5],[1,1]], [[4,1],[0,1]]],
+      middle: [[[7,1],[9,1]], [[10,.5],[9,.5],[7,1]], [[8,1.5],[6,.5]], [[8,1],[7,1]]],
+      high: [[[11,.5],[10,.5],[11,1]], [[12,1],[9,.5],[10,.5]], [[11,1],[10,1]], [[11,1],[9,1]]]
+    }, {
+      metre: 3,
+      low: [[[0,1.5],[1,.5],[2,1]], [[5,2],[3,1]], [[2,1],[3,.5],[2,.5],[1,1]], [[4,1],[0,2]]],
+      middle: [[[9,1],[8,1],[7,1]], [[7,.5],[8,.5],[9,1],[10,1]], [[9,1],[7,1],[6,1]], [[8,1],[7,2]]],
+      high: [[[11,2],[12,1]], [[12,1],[11,1],[12,1]], [[11,1.5],[10,.5],[11,1]], [[13,1],[14,2]]]
+    }, {
+      metre: 4,
+      low: [[[0,1],[4,.5],[3,.5],[2,2]], [[3,1],[5,1],[4,1],[1,1]], [[2,1.5],[1,.5],[0,1],[3,1]], [[1,1],[4,1],[0,2]]],
+      middle: [[[9,2],[7,1],[9,1]], [[10,1.5],[9,.5],[8,2]], [[7,1],[9,1],[7,.5],[8,.5],[7,1]], [[8,1],[6,1],[7,2]]],
+      high: [[[11,1],[13,1],[11,.5],[10,.5],[11,1]], [[12,2],[13,1],[10,1]], [[11,2],[9,1],[12,1]], [[10,1],[11,1],[9,2]]]
+    }, {
+      metre: 3,
+      low: [[[0,1],[1,.5],[2,.5],[3,1]], [[4,1],[5,1],[6,1]], [[7,1.5],[5,.5],[3,1]], [[4,1],[0,2]]],
+      middle: [[[7,1],[9,1],[11,1]], [[12,1],[11,.5],[12,.5],[13,1]], [[14,1],[12,1],[10,1]], [[8,1],[7,2]]],
+      high: [[[11,1],[13,1],[14,1]], [[14,1.5],[15,.5],[15,1]], [[16,1.5],[15,.5],[14,1]], [[11,1],[9,2]]]
+    }
+  ];
+
+  function varySungLine(bars, random) {
+    const notes = bars.flat();
+    const degrees = notes.map(([n]) => n);
+    const min = Math.min(...degrees), max = Math.max(...degrees);
+    const choices = [];
+    const cadenceStart = notes.length - bars.at(-1).length;
+    for (let i = 0; i < cadenceStart; i++) {
+      const [current, duration] = notes[i];
+      if (duration < 1) continue;
+      const next = notes[i + 1][0];
+      for (const neighbour of [current - 1, current + 1]) {
+        if (neighbour >= min && neighbour <= max && neighbour !== next && Math.abs(next - neighbour) <= 2) {
+          choices.push({i, neighbour});
+        }
+      }
+    }
+    if (choices.length) {
+      const {i, neighbour} = pick(choices, random);
+      const [current, duration] = notes[i];
+      notes.splice(i, 1, [current, duration - .5], [neighbour, .5]);
+    }
+    return notes;
+  }
+
+  function ensemble(type, grade, random) {
+    const phrase = pick(ensemblePhrases, random);
+    const key = pick(type === 'b' ? advancedSightKeys : keys, random).slice();
+    const upperTarget = grade === 7 && type === 'b';
+    // Put the written treble part near middle C and the memory bass in the octave below.
+    const octave = type === 'b' ? (key[1] < 60 ? 1 : 0) : (key[1] >= 60 ? -1 : 0);
+    key[1] += octave * 12;
+    key[2] += octave * 7;
+    const bpm = pick([84, 88, 92, 96], random);
+    function voice(line) {
+      const degrees = line.map(([n]) => n - (upperTarget ? 7 : 0));
+      const ex = exercise(type, key, degrees, line.map(([,length]) => length), bpm, phrase.metre);
+      degrees.forEach((n,i) => {
+        if (ex.isMinor && mod(n,7) === 6 && degrees[i+1] === n+1) ex.notes[i]++;
+      });
+      return ex;
+    }
+    const low = voice(upperTarget ? phrase.low.flat() : varySungLine(phrase.low, random));
+    const middle = voice(upperTarget ? varySungLine(phrase.middle, random) : phrase.middle.flat());
+    const target = upperTarget ? middle : low;
+    const others = upperTarget ? [low] : [middle];
+    if (type === 'a' && grade === 8) others.push(voice(phrase.high.flat()));
+    target.grade = grade;
+    const start = spelling(target.notes[0], target.positions[0]);
+    target.startName = pair(start, start);
+    target.otherVoices = others.map(({notes, beats}) => ({notes, beats}));
+    return target;
+  }
+
   const periods = [
     pair('Baroque', '巴洛克时期'), pair('Classical', '古典主义时期'),
     pair('Romantic', '浪漫主义时期'), pair('Twentieth century', '二十世纪')
@@ -327,25 +418,35 @@
     };
   }
 
-  let studyDeck = [];
+  const studyDecks = {5: [], 7: [], 8: []};
   function validRecipe(saved) {
-    return saved?.version === 1 && Number.isInteger(saved.seed) && saved.seed >= 0 &&
+    const known = saved?.version === 1 || (saved?.version === 2 && [7,8].includes(saved.grade));
+    return known && Number.isInteger(saved.seed) && saved.seed >= 0 &&
       saved.seed <= 0xffffffff && Number.isInteger(saved.study) && saved.study >= 0 && saved.study < studies.length;
   }
-  function makeSet(saved) {
+  function makeSet(saved, grade = 5) {
     let seed, study;
     if (validRecipe(saved)) {
+      grade = saved.version === 1 ? 5 : saved.grade;
       seed = saved.seed;
       study = saved.study;
     } else {
-      if (!studyDeck.length) studyDeck = shuffled(studies.map((_, i) => i), Math.random);
-      study = studyDeck.pop();
+      if (![7,8].includes(grade)) grade = 5;
+      if (!studyDecks[grade].length) studyDecks[grade] = shuffled(studies.map((_, i) => i), Math.random);
+      study = studyDecks[grade].pop();
       seed = Math.floor(Math.random() * 0x100000000);
     }
     let state = seed;
     function random() {
       state = (Math.imul(1664525, state) + 1013904223) >>> 0;
       return state / 0x100000000;
+    }
+    if (grade !== 5) {
+      const a = ensemble('a', grade, random);
+      const b = ensemble('b', grade, random);
+      const baseListening = listening(studies[study], random);
+      return {grade, recipe: {version: 2, grade, seed, study}, a, b,
+        ...root.AdvancedListening.make(grade, random, baseListening, a)};
     }
     return {
       recipe: { version: 1, seed, study },
@@ -374,6 +475,37 @@
     });
   }
 
+  function scoreLayout(ex, left, barWidth) {
+    const bars = [];
+    const written = new Map();
+    const signatureSteps = (ex.signature < 0 ? [6,2,5,1] : [3,0,4,1]).slice(0, Math.abs(ex.signature));
+    let cursor = 0;
+    ex.positions.forEach((position, i) => {
+      const beat = cursor % ex.metre;
+      if (beat === 0) {
+        bars.push([]);
+        written.clear();
+      }
+      const letter = mod(position, 7);
+      const natural = 12 * (Math.floor(position / 7) + 1) + major[letter];
+      const alteration = ex.notes[i] - natural;
+      const keySign = signatureSteps.includes(letter) ? Math.sign(ex.signature) : 0;
+      const sign = alteration === (written.get(position) ?? keySign) ? null : alteration;
+      bars.at(-1).push({beat, sign});
+      written.set(position, alteration);
+      cursor += ex.beats[i];
+    });
+    return bars.flatMap((bar, index) => {
+      const spaceForSigns = bar.filter(note => note.sign !== null).length * 9;
+      const spacing = (barWidth - spaceForSigns) / ex.metre;
+      let inset = left + index % 2 * barWidth + 12;
+      return bar.map(({beat, sign}) => {
+        if (sign !== null) inset += 9;
+        return {beat, sign, row: Math.floor(index / 2), x: inset + beat * spacing};
+      });
+    });
+  }
+
   function score(ex, clef = 'treble', lang = 'en') {
     const bass = clef === 'bass';
     const bottom = bass ? 18 : 30;
@@ -382,40 +514,108 @@
     function line(x1, y1, x2, y2, width = 1) {
       parts.push('<path d="M' + x1 + ' ' + y1 + ' L' + x2 + ' ' + y2 + '" fill="none" stroke="currentColor" stroke-width="' + width + '"/>');
     }
-    for (let i = 0; i < 5; i++) line(8, 38 + i * 8, 385, 38 + i * 8);
-    if (bass) {
-      parts.push('<path d="M18 47 C16 39 23 35 29 39 C41 47 29 64 16 70 C25 63 32 52 30 44 C29 36 21 37 20 43 C25 40 28 48 23 50 C20 51 18 49 18 47Z"/><circle cx="39" cy="42" r="1.7"/><circle cx="39" cy="50" r="1.7"/>');
-    } else {
-      parts.push('<path d="M28 68 C14 67 15 54 21 46 C26 39 35 33 32 23 C31 19 26 27 26 34 C25 42 29 58 32 73 C34 83 28 88 24 85 C20 82 23 77 26 79" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M21 62 C17 54 24 47 31 50 C40 54 36 68 27 68 C20 69 14 63 16 56 C16 62 21 68 28 66 C35 65 35 55 29 54 C24 53 20 57 21 62Z"/>');
-    }
-    const sharp = ex.signature > 0;
-    const signPositions = sharp ? (bass ? [24,21] : [38,35]) : (bass ? [20,23] : [34,37]);
-    for (let i = 0; i < Math.abs(ex.signature); i++) {
-      const x = 53 + i * 11, y = yAt(signPositions[i]);
-      if (sharp) {
+    function accidental(x, y, sign) {
+      if (sign > 0) {
         line(x - 2.4, y - 8, x - 2.4, y + 8, 1);
         line(x + 2.4, y - 9, x + 2.4, y + 7, 1);
         line(x - 4.3, y - 2, x + 4.3, y - 4, 2.5);
         line(x - 4.3, y + 4, x + 4.3, y + 2, 2.5);
-      } else {
+      } else if (sign < 0) {
         line(x - 2, y - 12, x - 2, y + 4.5, 1.3);
         parts.push('<path d="M' + (x-2) + ' ' + (y-.8) + 'c6-7 10 0 0 5.3c4-4 5-9 0-5.3Z"/>');
+      } else {
+        line(x - 2, y - 8.5, x - 2, y + 4, 1.1);
+        line(x + 2, y - 4, x + 2, y + 8.5, 1.1);
+        line(x - 2, y - 2, x + 2, y - 3.5, 2.1);
+        line(x - 2, y + 3.5, x + 2, y + 2, 2.1);
       }
     }
+    function staff() {
+      for (let i = 0; i < 5; i++) line(8, 38 + i * 8, 385, 38 + i * 8);
+      if (bass) {
+        parts.push('<path d="M18 47 C16 39 23 35 29 39 C41 47 29 64 16 70 C25 63 32 52 30 44 C29 36 21 37 20 43 C25 40 28 48 23 50 C20 51 18 49 18 47Z"/><circle cx="39" cy="42" r="1.7"/><circle cx="39" cy="50" r="1.7"/>');
+      } else {
+        parts.push('<path d="M28 68 C14 67 15 54 21 46 C26 39 35 33 32 23 C31 19 26 27 26 34 C25 42 29 58 32 73 C34 83 28 88 24 85 C20 82 23 77 26 79" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M21 62 C17 54 24 47 31 50 C40 54 36 68 27 68 C20 69 14 63 16 56 C16 62 21 68 28 66 C35 65 35 55 29 54 C24 53 20 57 21 62Z"/>');
+      }
+      const sharp = ex.signature > 0;
+      const signPositions = sharp ? (bass ? [24,21,25,22] : [38,35,39,36]) : (bass ? [20,23,19,22] : [34,37,33,36]);
+      for (let i = 0; i < Math.abs(ex.signature); i++) {
+        accidental(53 + i * 11, yAt(signPositions[i]), ex.signature);
+      }
+    }
+    const timed = ex.grade === 7 || ex.grade === 8;
+    const sigEnd = 54 + Math.abs(ex.signature) * 11;
+    const left = sigEnd + 22;
+    const barWidth = (384 - left) / 2;
+    const layout = timed ? scoreLayout(ex, left, barWidth) : ex.positions.map((_, i) => ({x: 92 + i * 53, row: 0, sign: null}));
+    let row = -1;
+    let beamEnd = null;
+    function labelAt(x,y,value,size) {
+      parts.push('<text x="' + x + '" y="' + y + '" font-size="' + size + '" font-family="Georgia, serif">' + value + '</text>');
+    }
     ex.positions.forEach((position, i) => {
+      const {row: currentRow, x, beat, sign} = layout[i];
+      if (currentRow !== row) {
+        if (row >= 0) parts.push('</g>');
+        row = currentRow;
+        parts.push('<g transform="translate(0 ' + row * 94 + ')">');
+        staff();
+        if (timed) {
+          if (row === 0) {
+            labelAt(sigEnd, 53, ex.metre, 20);
+            labelAt(sigEnd, 69, 4, 20);
+          }
+          line(left + barWidth,38,left + barWidth,70);
+          line(384,38,384,70);
+        }
+      }
       const active = position - (bass ? 7 : 0);
-      const x = 92 + i * 53, y = yAt(active);
+      const y = yAt(active);
+      const duration = timed ? ex.beats[i] : 1;
+      if (sign !== null) accidental(x - 11, y, sign);
       for (let ledger = bottom - 2; ledger >= active; ledger -= 2) line(x - 9, yAt(ledger), x + 9, yAt(ledger));
       for (let ledger = bottom + 10; ledger <= active; ledger += 2) line(x - 9, yAt(ledger), x + 9, yAt(ledger));
-      parts.push('<ellipse cx="' + x + '" cy="' + y + '" rx="5.8" ry="3.5" transform="rotate(-18 ' + x + ' ' + y + ')"/>');
-      const up = active < bottom + 4;
-      line(x + (up ? 5 : -5), y, x + (up ? 5 : -5), y + (up ? -24 : 24), 1.4);
+      const fill = duration >= 2 ? ' fill="white" stroke="currentColor" stroke-width="1.5"' : '';
+      parts.push('<ellipse cx="' + x + '" cy="' + y + '" rx="5.5" ry="3.5" transform="rotate(-18 ' + x + ' ' + y + ')"' + fill + '/>');
+      let up = active < bottom + 4;
+      let stemY = y + (up ? -24 : 24);
+      const closesBeam = beamEnd !== null;
+      const opensBeam = !closesBeam && Number.isInteger(beat) && duration === .5 && ex.beats[i + 1] === .5;
+      if (closesBeam) {
+        ({up, stemY} = beamEnd);
+        beamEnd = null;
+      } else if (opensBeam) {
+        const nextPosition = ex.positions[i + 1] - (bass ? 7 : 0);
+        const nextY = yAt(nextPosition);
+        up = (active + nextPosition) / 2 < bottom + 4;
+        const middleY = (up ? Math.min(y, nextY) - 24 : Math.max(y, nextY) + 24);
+        const slant = Math.max(-4, Math.min(4, (nextY - y) / 2));
+        stemY = middleY - slant / 2;
+        beamEnd = {up, stemY: middleY + slant / 2};
+      }
+      const stemX = x + (up ? 5 : -5);
+      if (duration < 4) line(stemX, y, stemX, stemY, 1.4);
+      if (opensBeam) {
+        line(stemX, stemY, layout[i + 1].x + (up ? 5 : -5), beamEnd.stemY, 3.4);
+      } else if (duration === .5 && !closesBeam) {
+        const flag = up ? 'c0 6 10 9 6 17c1-8-7-9-7-14Z' : 'c0-6 10-9 6-17c1 8-7 9-7 14Z';
+        parts.push('<path d="M' + stemX + ' ' + stemY + flag + '"/>');
+      }
+      if (duration === 1.5 || duration === 3) {
+        const dotY = y - (mod(active - bottom,2) ? 0 : 3);
+        parts.push('<circle cx="' + (x + 9) + '" cy="' + dotY + '" r="1.5"/>');
+      }
     });
-    const names = noteNames(ex, clef);
+    parts.push('</g>');
+    const names = noteNames(ex, clef).map((name, i) => {
+      if (!timed) return name;
+      const duration = ex.beats[i];
+      return lang === 'zh' ? name + '（' + duration + '拍）' : name + ' (' + duration + (duration === 1 ? ' beat)' : ' beats)');
+    });
     const label = lang === 'zh'
-      ? (bass ? '低音谱号' : '高音谱号') + '视唱谱，' + ex.key.zh + '，' + names.join('、') + '。'
-      : (bass ? 'Bass' : 'Treble') + ' clef sight singing in ' + ex.key.en + '. ' + names.join(', ') + '.';
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 395 108" width="100%" role="img" aria-label="' + label + '" fill="currentColor">' + parts.join('') + '</svg>';
+      ? (bass ? '低音谱号' : '高音谱号') + '视唱谱，' + ex.key.zh + '，' + (timed ? ex.metre + '/4拍，' : '') + names.join('、') + '。'
+      : (bass ? 'Bass' : 'Treble') + ' clef sight singing in ' + ex.key.en + (timed ? ', ' + ex.metre + '/4' : '') + '. ' + names.join(', ') + '.';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 395 ' + (108 + row * 94) + '" width="100%" role="img" aria-label="' + label + '" fill="currentColor">' + parts.join('') + '</svg>';
   }
 
   root.Music = { makeSet, validRecipe, pitches, noteNames, onsets, score };

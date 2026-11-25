@@ -90,8 +90,17 @@
 .tr-feedback p + p { margin-top: 7px; }
 .tr-evidence + .tr-evidence { margin-top: 14px; }
 .tr-evidence p { margin-top: 4px; }
-.tr-marks { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 14px 0; padding: 0; font-size: .875rem; }
-.tr-marks li { padding: 5px 9px; border-radius: 6px; }
+.tr-marks { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .9rem; }
+.tr-marks th, .tr-marks td { padding: 7px 4px; border-bottom: 1px solid var(--line, #d7ded9); text-align: left; }
+.tr-marks th { color: var(--muted, #536966); font-size: .83rem; }
+.tr-marks td:last-child span { display: inline-block; padding: 3px 7px; border-radius: 5px; white-space: nowrap; }
+.tr-marks .tr-target { gap: 4px; min-height: 44px; padding: 5px 6px; font-size: inherit; }
+.tr-marks .tr-target svg { width: 15px; height: 15px; }
+.tr-description { display: grid; gap: 8px; margin-top: 16px; font-weight: 600; }
+.tr-description textarea { width: 100%; max-width: 100%; padding: 10px; color: inherit; border: 1px solid var(--tr-line); border-radius: 8px; font: inherit; font-weight: 400; resize: vertical; }
+.tr-own-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tr-observations { padding-inline-start: 1.3em; line-height: 1.5; }
+.tr-observations li + li { margin-top: 6px; }
 .tr-correct { background: #e0efe5; color: #1a5b40; }
 .tr-review { background: #f9efdd; color: #744800; }
 .tr-note-help { margin-top: 14px; }
@@ -100,6 +109,10 @@
 @media (max-width: 540px) {
   .tr-session { padding-top: 12px; }
   .tr-head { margin-top: 22px; }
+  .tr-progress { gap: 4px; }
+  .tr-progress li { min-width: 0; font-size: .72rem; text-align: center; }
+  .tr-marks { font-size: .83rem; }
+  .tr-marks th, .tr-marks td { padding-inline: 2px; }
   .tr-feedback-head { gap: 8px; }
   .tr-source div { min-width: 0; }
 }

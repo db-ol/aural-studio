@@ -79,17 +79,39 @@
     run.end = Math.max(run.end, end + tail);
   }
 
-  function notes(run, exercise, start, clef, crispness = .86) {
-    const pitches = root.Music.pitches(exercise, clef);
+  function line(run, exercise, pitches, beats, start, weight = 1, crispness = .86) {
     const seconds = 60 / exercise.bpm;
     let beat = 0;
     pitches.forEach((pitch, i) => {
-      const duration = exercise.beats[i];
+      const duration = beats[i];
       const barStart = exercise.metre && beat % exercise.metre === 0;
-      sound(run, pitch, start + beat * seconds, duration * seconds * crispness, barStart ? .91 : .72);
+      sound(run, pitch, start + beat * seconds, duration * seconds * crispness, weight * (barStart ? .91 : .72));
       beat += duration;
     });
     return start + beat * seconds;
+  }
+
+  function notes(run, exercise, start, clef) {
+    return line(run, exercise, root.Music.pitches(exercise, clef), exercise.beats, start);
+  }
+
+  function ensemble(run, exercise, start, clef, withTarget) {
+    const shift = exercise.type === 'b' && clef === 'bass' ? -12 : 0;
+    let end = start;
+    if (withTarget) end = notes(run, exercise, start, clef);
+    for (const voice of exercise.otherVoices) {
+      end = line(run, exercise, voice.notes.map(pitch => pitch + shift), voice.beats, start, .78, .9);
+    }
+    return end;
+  }
+
+  function count(run, exercise, start, bars) {
+    const beat = 60 / exercise.bpm;
+    for (let i = 0; i < exercise.metre * bars; i++) {
+      const strong = i % exercise.metre === 0;
+      sound(run, strong ? 1460 : 990, start + i * beat, .049, strong ? 1 : .65, true);
+    }
+    return start + exercise.metre * bars * beat;
   }
 
   function reference(run, exercise, start, clef) {
@@ -123,19 +145,26 @@
       const pitch = root.Music.pitches(exercise, clef)[options.index ?? 0];
       if (!Number.isFinite(pitch)) throw new Error('Unknown note.');
       sound(run, pitch, start, .63, .82);
+    } else if (exercise.programs) {
+      piece(run, exercise.programs[mode] || exercise.programs.prompt, start);
     } else if (exercise.type === 'c') {
       piece(run, exercise.piece, start);
+    } else if (exercise.otherVoices && exercise.type === 'b' && mode === 'accompaniment') {
+      const lead = reference(run, exercise, start, clef);
+      const voiceStart = count(run, exercise, lead, 2);
+      ensemble(run, exercise, voiceStart, clef, false);
+      options.onVoiceStart?.(voiceStart - c.currentTime);
+    } else if (exercise.otherVoices && exercise.type === 'b' && mode === 'prompt') {
+      count(run, exercise, reference(run, exercise, start, clef), 1);
     } else if (mode === 'reference' || (exercise.type === 'b' && mode === 'prompt')) {
       reference(run, exercise, start, clef);
+    } else if (exercise.otherVoices && exercise.type === 'a' && mode === 'extra') {
+      ensemble(run, exercise, start, clef, true);
     } else if (mode === 'prompt' && exercise.type === 'a') {
-      const beat = 60 / exercise.bpm;
-      const countIn = reference(run, exercise, start, clef);
-      for (let i = 0; i < exercise.metre * 2; i++) {
-        const strong = i % exercise.metre === 0;
-        sound(run, strong ? 1460 : 990, countIn + i * beat, .049, strong ? 1 : .65, true);
-      }
-      const end = notes(run, exercise, countIn + exercise.metre * 2 * beat, clef);
-      notes(run, exercise, end + beat * 1.5, clef);
+      const first = count(run, exercise, reference(run, exercise, start, clef), 2);
+      const phrase = at => exercise.otherVoices ? ensemble(run, exercise, at, clef, true) : notes(run, exercise, at, clef);
+      const end = phrase(first);
+      phrase(end + 1.5 * 60 / exercise.bpm);
     } else {
       const end = notes(run, exercise, start, clef);
       if (exercise.type === 'd' && mode === 'prompt') notes(run, exercise, end + .77, clef);
@@ -171,7 +200,7 @@
       try {
         // Safari can route Web Audio through the silent switch unless playback is requested.
         const audioSession = root.navigator?.audioSession;
-        if (audioSession) {
+        if (audioSession && !options.recording) {
           try {
             run.sessionType = audioSession.type;
             audioSession.type = 'playback';

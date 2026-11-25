@@ -231,6 +231,32 @@ button {
   height: 2px;
   background: #a18b58;
 }
+.grade-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 9px;
+}
+.grade-picker span {
+  margin-right: 6px;
+  color: #476b58;
+  font: 650 .78rem/1.2 var(--mono);
+  letter-spacing: .1em;
+}
+.grade-picker a {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 600;
+}
+.grade-picker a:hover { background: #edf0e8; }
+.grade-picker a[aria-current=true] {
+  border-color: #bccbbb;
+  background: #e5eee2;
+  color: #204c35;
+}
 .page-heading h1 {
   font: 600 clamp(2.3rem, 3.4vw, 3.15rem)/1.27 var(--display);
   letter-spacing: -0.055em;
@@ -886,6 +912,14 @@ dialog .text-link {
   }
 }
 @media (max-width: 650px) {
+  .grade-picker a { padding: 7px 8px; }
+  .guide-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
   .shell {
     width: calc(100% - 36px);
   }

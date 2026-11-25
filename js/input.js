@@ -115,7 +115,7 @@
     for (let i = 1; i < rows; i++) {
       for (let j = 1; j < cols; j++) {
         const miss = Math.abs(actual[j - 1].pitch - octave - expected[i - 1]);
-        const diagonal = costs[i - 1][j - 1] + (miss < 0.65 ? miss * 0.3 : Math.min(1.5, 0.75 + miss * 0.15));
+        const diagonal = costs[i - 1][j - 1] + (miss <= 0.5 ? miss * 0.3 : Math.min(1.5, 0.75 + miss * 0.15));
         const choices = [diagonal, costs[i - 1][j] + 1, costs[i][j - 1] + 1];
         costs[i][j] = Math.min(...choices);
         previous[i][j] = choices.indexOf(costs[i][j]);
@@ -133,20 +133,32 @@
     return { cost: costs[rows - 1][cols - 1], matches, octave };
   }
 
-  function assessPitch(expected, onsets, actual) {
+  function assessPitch(expected, onsets, actual, accompanied = false) {
     if (!actual.length) return null;
     const best = [0, -12, 12, -24, 24].map(octave => align(expected, actual, octave))
       .reduce((a, b) => a.cost <= b.cost ? a : b);
     const marks = best.matches.map((index, i) => {
       if (index === null) return 'missed';
-      const offset = actual[index].pitch - best.octave - expected[i];
-      if (Math.abs(offset) <= 0.65) return 'ok';
-      return offset < 0 ? 'low' : 'high';
+      const cents = Math.round(actual[index].pitch * 100) - (best.octave + expected[i]) * 100;
+      if (Math.abs(cents) <= 50) return 'ok';
+      return cents < 0 ? 'low' : 'high';
     });
     const correct = marks.filter(mark => mark === 'ok').length;
     const pitchScore = Math.round(correct * 100 / Math.max(actual.length, expected.length));
-    const rhythmScore = onsets ? rhythm(onsets, actual.map(note => note.time)) : null;
-    return { marks, correct, pitchScore, rhythmScore, score: rhythmScore === null ? pitchScore : Math.round(0.75 * pitchScore + 0.25 * rhythmScore) };
+    let rhythmScore = onsets ? rhythm(onsets, actual.map(note => note.time)) : null;
+    if (accompanied && onsets) {
+      // The accompaniment fixes the pulse. Allow a little time for vocal attack and device latency.
+      const total = best.matches.reduce((sum, j, i) => {
+        if (j === null) return sum;
+        const error = Math.abs(actual[j].time - onsets[i]);
+        return sum + Math.max(0, 1 - Math.max(0, error - 0.17) / 0.38);
+      }, 0);
+      rhythmScore = Math.round(100 * total / Math.max(expected.length, actual.length));
+    }
+    const heardPitches = best.matches.map(i => i === null ? null : Number(actual[i].pitch.toFixed(2)));
+    const extraCount = actual.length - best.matches.filter(i => i !== null).length;
+    return { marks, correct, heardPitches, octave: best.octave, extraCount, pitchScore, rhythmScore,
+      score: rhythmScore === null ? pitchScore : Math.round(0.75 * pitchScore + 0.25 * rhythmScore) };
   }
 
   let current = null;
@@ -205,7 +217,11 @@
     cleanup(current);
   }
 
-  async function record(onEnd, onClap) {
+  function startVoiceIn(delay) {
+    if (current) current.voiceStart = performance.now() + delay * 1000;
+  }
+
+  async function record(onEnd, onClap, waitForCue = false) {
     cancel();
     if (!supported()) throw new Error('unavailable');
     const session = { frames: [] };
@@ -242,6 +258,7 @@
       enableReplay(session);
       const samples = new Float32Array(session.analyser.fftSize);
       const start = performance.now();
+      session.voiceStart = waitForCue ? Infinity : start;
       const ended = () => { if (current === session) onEnd(); };
       stream.getTracks().forEach(track => track.addEventListener('ended', ended));
       const detectClap = clapDetector();
@@ -254,7 +271,8 @@
         if (time >= 40 || session.context.state !== 'running') return ended();
         session.analyser.getFloatTimeDomainData(samples);
         if (!onClap) {
-          session.frames.push({ time, pitch: detectPitch(samples, rate) });
+          const voiceTime = (performance.now() - session.voiceStart) / 1000;
+          if (voiceTime >= 0) session.frames.push({ time: voiceTime, pitch: detectPitch(samples, rate) });
           return;
         }
         const end = session.context.currentTime - startClock;
@@ -280,5 +298,5 @@
     return notesFromFrames(frames);
   }
 
-  root.AuralInput = { record, finish, cancel, supported, assessPitch, rhythm, notesFromFrames, detectPitch, clapDetector };
+  root.AuralInput = { record, finish, cancel, supported, startVoiceIn, assessPitch, rhythm, notesFromFrames, detectPitch, clapDetector };
 })(typeof window === 'undefined' ? globalThis : window);

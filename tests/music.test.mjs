@@ -111,7 +111,7 @@ test('saved recipes reproduce every note and answer choice without advancing the
   }
 });
 
-function fakeContext() {
+function fakeContext(extra = {}) {
   const oscillators = [];
   function param() {
     return { setValueAtTime() {}, exponentialRampToValueAtTime() {} };
@@ -131,17 +131,11 @@ function fakeContext() {
       return osc;
     }
   }
-  const scope = harness({ AudioContext });
+  const scope = harness({ AudioContext, ...extra });
   vm.runInContext(audioSource, scope);
-  return { ...scope, oscillators };
-}
-
-test('prompts schedule the starting reference, two bar count and required repetitions', async () => {
-  const { Music, Piano, oscillators } = fakeContext();
-  const { a, b, c, d } = Music.makeSet();
   async function play(ex, mode = 'prompt', options) {
     oscillators.length = 0;
-    const completed = Piano.play(ex, mode, options);
+    const completed = scope.Piano.play(ex, mode, options);
     const marker = oscillators.at(-1);
     const notes = oscillators.slice(0, -1).map(({ at, until, frequency, pitched }) =>
       ({ at, until, hz: frequency.value, pitched }));
@@ -150,6 +144,12 @@ test('prompts schedule the starting reference, two bar count and required repeti
     assert.equal(await completed, true);
     return notes;
   }
+  return { ...scope, play };
+}
+
+test('prompts schedule the starting reference, two bar count and required repetitions', async () => {
+  const { Music, Piano, play } = fakeContext();
+  const { a, b, c, d } = Music.makeSet();
   const played = await play(a);
   assert.equal(played.filter(n => !n.pitched).length, a.metre * 2);
   assert.equal(played.filter(n => n.pitched).length, 5 + a.notes.length * 2);
@@ -165,4 +165,51 @@ test('prompts schedule the starting reference, two bar count and required repeti
   const cancelled = Piano.play(a);
   Piano.stop();
   assert.equal(await cancelled, false);
+});
+
+test('advanced memory plays all voices, while accompanied singing plays the other part alone', async () => {
+  const writes = [];
+  const audioSession = {get type() { return 'play-and-record'; }, set type(mode) { writes.push(mode); }};
+  const { Music, play } = fakeContext({
+    navigator: {audioSession}, AdvancedListening: { make: (_, __, base) => base }
+  });
+  const midi = note => Math.round(69 + 12 * Math.log2(note.hz / 440));
+  for (const grade of [7, 8]) {
+    const {a,b} = Music.makeSet({version: 2, seed: 42, study: 3, grade});
+    const ensembleSize = [a, ...a.otherVoices].reduce((sum, voice) => sum + voice.notes.length, 0);
+    const memory = await play(a);
+    assert.equal(memory.filter(note => !note.pitched).length, a.metre * 2);
+    assert.equal(memory.filter(note => note.pitched).length, 5 + 2 * ensembleSize);
+    assert.equal((await play(a, 'extra')).length, ensembleSize);
+    assert.deepEqual((await play(a,'model')).map(midi), [...a.notes]);
+    assert.equal((await play(b)).filter(note => !note.pitched).length, b.metre);
+    for (const clef of ['treble','bass']) {
+      let delay;
+      writes.length = 0;
+      const accompaniment = await play(b, 'accompaniment', {
+        clef, recording: true, onVoiceStart: seconds => { delay = seconds; }
+      });
+      assert.deepEqual(writes, []);
+      assert.equal(accompaniment.filter(note => !note.pitched).length, b.metre * 2);
+      const first = accompaniment[0].at + 2 + 2 * b.metre * 60 / b.bpm;
+      assert.ok(Math.abs(1 + delay - first) < 1e-9);
+      const sung = accompaniment.filter(note => note.at >= first - 1e-9);
+      const shift = clef === 'bass' ? -12 : 0;
+      assert.deepEqual(sung.map(midi), [...b.otherVoices[0].notes].map(pitch => pitch + shift));
+      assert.deepEqual((await play(b, 'model', {clef})).map(midi), [...Music.pitches(b,clef)]);
+    }
+  }
+});
+
+test('an advanced listening program follows its own event times and selected playback mode', async () => {
+  const {play} = fakeContext();
+  const prompt = {bpm: 120, length: 4, events: [
+    {pitch: 60, at: 0, duration: 1, volume: .7}, {pitch: 67, at: 2, duration: .5, volume: .6}
+  ]};
+  const model = {bpm: 120, length: 1, events: [prompt.events[0]]};
+  const task = {type: 'cad', programs: {prompt, model}};
+  const heard = await play(task);
+  assert.equal(heard.length, 2);
+  assert.ok(Math.abs(heard[1].at - heard[0].at - 1) < 1e-9);
+  assert.equal((await play(task, 'model')).length, 1);
 });

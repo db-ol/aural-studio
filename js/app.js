@@ -3,56 +3,6 @@
 
   const syllabus =
     'https://www.abrsm.org/sites/default/files/2024-06/Piano%202025%20%26%202026%20Prac%20syllabus%2020240524_access.pdf';
-  const skills = {
-    a: {
-      part: 'A',
-      title: ['Melody recall', '旋律记忆'],
-      summary: [
-        'Listen twice, then sing or play the melody from memory.',
-        '听两遍旋律，再凭记忆唱出或弹出。'
-      ],
-      tip: [
-        'Keep the first note in mind through the count in. Listen for where the phrase rises, rests and comes home.',
-        '数拍时记住起音。第一遍听旋律的走向，第二遍留意停顿和收尾。'
-      ]
-    },
-    b: {
-      part: 'B',
-      title: ['Sight singing', '六音视唱'],
-      summary: [
-        'Read six notes in treble or bass clef and sing at your own pace.',
-        '看高音谱或低音谱，自由速度唱出六个音。'
-      ],
-      tip: [
-        'Sing the tonic quietly after the chord. Follow the steps and skips on the staff, then check that your last note returns to the tonic.',
-        '听主和弦后轻唱主音。看清相邻音是级进还是跳进，最后听自己是否回到了主音。'
-      ]
-    },
-    c: {
-      part: 'C(i)',
-      title: ['Musical features', '音乐听辨'],
-      summary: [
-        'Listen for musical details and the clues to style and period.',
-        '聆听音乐特征，辨别作品的风格与时期。'
-      ],
-      tip: [
-        'Read both questions before listening. Follow changes in the melody, then listen to what the other hand plays underneath.',
-        '听前先看两个问题。除了旋律本身，也要听另一只手怎样伴奏，这往往是辨别时期的线索。'
-      ]
-    },
-    d: {
-      part: 'C(ii)',
-      title: ['Rhythm and metre', '节奏与拍子'],
-      summary: [
-        'Tap back the rhythm, then identify the number of beats per bar.',
-        '拍出片段的节奏，再判断每小节有几拍。'
-      ],
-      tip: [
-        'Keep the pulse with your foot while your hands copy the notes. The strong beats will help you hear groups of two, three or four.',
-        '用脚保持基本拍，用手模仿音符的长短，再听重拍之间有两拍、三拍还是四拍。'
-      ]
-    }
-  };
   const workspace = document.querySelector('#workspace');
   const guide = document.querySelector('#guide');
   const storage = {
@@ -72,19 +22,33 @@
       }
     }
   };
+  const { grades, parts, skill: findSkill } = window.Curriculum;
+  const storedGrade = Number(storage.get('grade'));
+  let grade = grades.includes(storedGrade) ? storedGrade : 5;
+  const skills = () => parts(grade);
+  const skill = (key) => findSkill(grade, key);
+  const recordGrade = (record) => record?.grade ?? record?.recipe?.grade ?? 5;
+  const gradeHistory = () => history.filter((record) => recordGrade(record) === grade);
+  const routeFor = (path, level = grade) => '#grade/' + level + '/' + path;
   let lang = storage.get('lang') === 'en' ? 'en' : 'zh';
   let layout = storage.get('layout') === 'list' ? 'list' : 'grid';
-  let history = [];
-  try {
-    const saved = JSON.parse(storage.get('history'));
-    if (Array.isArray(saved)) history = saved.filter(validResult).slice(0, 120);
-  } catch {}
+  function readHistory(fallback = []) {
+    try {
+      const saved = JSON.parse(storage.get('history'));
+      if (Array.isArray(saved)) return saved.filter(validResult).slice(0, 120 * grades.length);
+    } catch {}
+    return fallback;
+  }
+  let history = readHistory();
   let persisted = true;
   let offlineReady = false;
   let page = '';
   let filter = 'all';
-  const keys = Object.keys(skills);
   const t = (en, zh) => (lang === 'en' ? en : zh);
+  function gradeName(level = grade) {
+    const word = { 5: '五级', 7: '七级', 8: '八级' };
+    return t('Grade ' + level, word[level]);
+  }
   const str = (pair) => t(...pair);
   const percent = (n) => n + t('%', '％');
   const { icon, motif } = window.Art;
@@ -92,6 +56,7 @@
   function validResult(r) {
     return (
       r &&
+      grades.includes(recordGrade(r)) &&
       typeof r.id === 'string' &&
       /^[\w-]+$/.test(r.id) &&
       Number.isFinite(r.date) &&
@@ -101,7 +66,7 @@
       r.items.every(
         (i) =>
           i &&
-          Object.hasOwn(skills, i.key) &&
+          findSkill(recordGrade(r), i.key) &&
           Number.isFinite(i.score) &&
           i.score >= 0 &&
           i.score <= 100 &&
@@ -113,25 +78,51 @@
     const saved = {
       id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
       date: Date.now(),
+      grade,
       mode: result.mode,
       clef: result.clef,
       recipe: result.recipe,
-      items: result.items.map(({ key, score, method, marks, choices, rhythmScore, chosenMetre, tapCount }) =>
-        ({ key, score, method, marks, choices, rhythmScore, chosenMetre, tapCount }))
+      items: result.items.map((item) => {
+        const fields = [
+          'key',
+          'score',
+          'method',
+          'marks',
+          'choices',
+          'rhythmScore',
+          'chosenMetre',
+          'tapCount',
+          'heardPitches',
+          'octave',
+          'extraCount',
+          'description',
+          'correct',
+          'pitchScore'
+        ];
+        return Object.fromEntries(
+          fields.filter((field) => item[field] !== undefined).map((field) => [field, item[field]])
+        );
+      })
     };
     if (!validResult(saved)) return;
-    history = [saved, ...history].slice(0, 120);
+    if (persisted) history = readHistory(history);
+    history = [saved, ...gradeHistory()]
+      .slice(0, 120)
+      .concat(history.filter((r) => recordGrade(r) !== grade));
     persisted = storage.set('history', JSON.stringify(history));
     location.replace('#result/' + saved.id);
   }
   window.App = {
+    get grade() {
+      return grade;
+    },
     get lang() {
       return lang;
     },
     t,
     complete,
     exit() {
-      location.hash = 'studio';
+      location.hash = routeFor('studio');
     }
   };
   const day = (date) =>
@@ -142,18 +133,44 @@
       minute: '2-digit',
       hour12: false
     }).format(date);
-  const partLabel = (key) => 'TEST ' + skills[key].part;
+  const partLabel = (key) => {
+    const part = skill(key).part;
+    return t('TEST ' + part, part.replace('(', '（').replace(')', '）') + ' 项');
+  };
   const method = (item) =>
     item.method === 'self' ? t('Self review', '自评') : t('Exercise feedback', '练习反馈');
   const testName = (r) =>
-    r.mode === 'mock' ? t('Mock aural test', '全套模拟测试') : str(skills[r.items[0].key].title);
+    r.mode === 'mock'
+      ? t('Mock aural test', '全套模拟测试')
+      : str(findSkill(recordGrade(r), r.items[0].key).title);
   const practiceLink = (key, label) =>
-    '<a class="action primary" href="#practice/' + key + '">' + icon('play') + label + '</a>';
+    '<a class="action primary" href="' + routeFor('practice/' + key) + '">' + icon('play') + label + '</a>';
   const smallLabel = (en, zh) => '<p class="kicker"><span></span>' + t(en, zh) + '</p>';
+  function gradePicker(path) {
+    const options = grades
+      .map(
+        (level) =>
+          '<a href="' +
+          routeFor(path, level) +
+          '"' +
+          (grade === level ? ' aria-current="true"' : '') +
+          '>' +
+          gradeName(level) +
+          '</a>'
+      )
+      .join('');
+    return (
+      '<nav class="grade-picker" aria-label="' +
+      t('Exam grade', '考试级别') +
+      '"><span>ABRSM</span>' +
+      options +
+      '</nav>'
+    );
+  }
   function heading(label, title, detail, side = '') {
     return (
       '<div class="page-heading"><div>' +
-      smallLabel(label, label) +
+      (label === null ? gradePicker(page) : smallLabel(label, label)) +
       '<h1>' +
       title +
       '</h1><p class="intro-copy">' +
@@ -185,8 +202,8 @@
     document.querySelector('#main-nav').innerHTML = tabs
       .map(
         ([id, img, label]) =>
-          '<a href="#' +
-          id +
+          '<a href="' +
+          routeFor(id) +
           '" ' +
           (active === id ? 'aria-current="page"' : '') +
           '>' +
@@ -197,12 +214,12 @@
       )
       .join('');
     footer();
-    document.title = t('Grade 5 practice', '五级听觉练习') + ' · Aural Studio';
+    document.title = gradeName() + t(' aural practice', '听觉练习') + ' · Aural Studio';
   }
   function footer() {
     document.getElementById('footer-note').textContent = offlineReady
       ? t('Ready for offline practice', '已可离线练习')
-      : t('Independent practice for ABRSM Grade 5', 'ABRSM 钢琴五级自主练习');
+      : t('ABRSM ' + gradeName() + ' aural practice', 'ABRSM 钢琴' + gradeName() + '自主练习');
   }
   function hero() {
     return (
@@ -210,39 +227,52 @@
       '<div class="hero-label">' +
       icon('headphones') +
       '<span>MOCK EXAM</span></div><h2 id="hero-title">' +
-      t('The mock aural test', '五级听力模拟测试') +
+      gradeName() +
+      t(' mock aural test', '听觉模拟') +
       '</h2>' +
       '<p>' +
-      t(
-        'Work through all four tasks in exam order, from melody recall to rhythm.',
-        '从旋律记忆到节奏辨别，按考试顺序完成四项测试。'
-      ) +
+      (grade === 5
+        ? t(
+            'Practise all four tasks, from memory singing to rhythm.',
+            '从旋律记忆到节奏辨别，按考试顺序完成四项练习。'
+          )
+        : grade === 7
+          ? t(
+              'Follow the lower voice, sing a duet part and identify the harmony before the listening piece.',
+              '从二声部低音记忆开始，依次练习视唱、和声、音乐听辨与节奏。'
+            )
+          : t(
+              'Start with three voices and finish with your own description of a piano piece.',
+              '从三声部记忆和终止进行开始，最后用自己的话描述一首钢琴小品。'
+            )) +
       '</p>' +
-      '<div class="hero-bottom"><a class="action hero-start" href="#session/mock">' +
+      '<div class="hero-bottom"><a class="action hero-start" href="' +
+      routeFor('session/mock') +
+      '">' +
       icon('play') +
       t('Start mock test', '开始模拟') +
       '</a><span class="hero-time">' +
-      icon('clock') +
-      t('About 5 min', '约 5 分钟') +
+      icon('layers') +
+      t(skills().length + ' tasks', skills().length + ' 个练习环节') +
       '</span></div></div></section>'
     );
   }
   function cards() {
-    return keys
+    return skills()
       .map(
         (key) =>
           '<a class="skill-card skill-' +
-          key +
-          '" href="#practice/' +
-          key +
+          skill(key).art +
+          '" href="' +
+          routeFor('practice/' + key) +
           '"><div class="art-panel">' +
-          motif(key) +
+          motif(skill(key).art) +
           '</div><div class="card-body"><span class="part">' +
           partLabel(key) +
           '</span><h3>' +
-          str(skills[key].title) +
+          str(skill(key).title) +
           '</h3><p>' +
-          str(skills[key].summary) +
+          str(skill(key).summary) +
           '</p><span class="card-start">' +
           icon('play') +
           t('Practise', '开始练习') +
@@ -301,14 +331,16 @@
     );
   }
   function home() {
+    const recent = gradeHistory();
     const guideButton =
       '<button type="button" class="action guide-btn" data-guide>' +
       icon('book') +
+      '<span>' +
       t('Exam guide', '考试指南') +
-      '</button>';
+      '</span></button>';
     return (
       heading(
-        'ABRSM  /  GRADE 5',
+        null,
         t('Aural practice room', '听觉练习室'),
         t(
           'Choose a skill to work on, or put them together in a mock test.',
@@ -329,39 +361,43 @@
       '<section class="section-block recent"><div class="section-heading"><h2>' +
       t('Recent practice', '最近练习') +
       '</h2>' +
-      (history.length
-        ? '<a class="text-link" href="#history">' + t('View practice log', '查看练习记录') + '</a>'
+      (recent.length
+        ? '<a class="text-link" href="' +
+          routeFor('history') +
+          '">' +
+          t('View practice log', '查看练习记录') +
+          '</a>'
         : '') +
       '</div><div class="log-list">' +
-      (history.length ? history.slice(0, 3).map(row).join('') : empty()) +
+      (recent.length ? recent.slice(0, 3).map(row).join('') : empty()) +
       '</div></section>'
     );
   }
   function mock() {
     return (
       heading(
-        'ABRSM  /  GRADE 5',
+        null,
         t('Mock test', '模拟测试'),
         t(
-          'Take the four tasks in order. You can review your results at the end.',
-          '按顺序完成四个环节，结束后一起查看结果。'
+          'Work through the tasks in order. Review your answers together at the end.',
+          '按考试顺序完成本级的各个环节，结束后一起查看结果。'
         )
       ) +
       hero() +
       '<section class="section-block"><div class="section-heading"><h2>' +
       t('Test sequence', '考试顺序') +
       '</h2></div><div class="sequence">' +
-      keys
+      skills()
         .map(
           (k) =>
             '<div class="sequence-row skill-' +
-            k +
+            skill(k).art +
             '"><span class="step-part">' +
-            skills[k].part +
+            skill(k).part +
             '</span><div><h3>' +
-            str(skills[k].title) +
+            str(skill(k).title) +
             '</h3><p>' +
-            str(skills[k].summary) +
+            str(skill(k).summary) +
             '</p></div></div>'
         )
         .join('') +
@@ -369,16 +405,17 @@
     );
   }
   function log() {
-    const items = history.flatMap((r) => r.items);
+    const records = gradeHistory();
+    const items = records.flatMap((r) => r.items);
     const stats = [
-      [history.length, t('Sessions', '完成次数')],
-      [history.filter((r) => r.mode === 'mock').length, t('Mock tests', '模拟测试')],
-      [new Set(history.map((r) => new Date(r.date).toDateString())).size, t('Practice days', '练习天数')]
+      [records.length, t('Sessions', '完成次数')],
+      [records.filter((r) => r.mode === 'mock').length, t('Mock tests', '模拟测试')],
+      [new Set(records.map((r) => new Date(r.date).toDateString())).size, t('Practice days', '练习天数')]
     ];
-    const filtered = history.filter((r) => filter === 'all' || r.mode === filter);
+    const filtered = records.filter((r) => filter === 'all' || r.mode === filter);
     return (
       heading(
-        'PRACTICE LOG',
+        null,
         t('Practice log', '练习记录'),
         t(
           'Revisit your results and choose a skill for your next session.',
@@ -392,18 +429,18 @@
         ? '<section class="section-block"><div class="section-heading"><h2>' +
           t('Latest by skill', '各项最近表现') +
           '</h2></div><div class="skills-summary">' +
-          keys
+          skills()
             .map((k) => {
               const latest = items.find((i) => i.key === k);
               return (
-                '<a href="#practice/' +
-                k +
+                '<a href="' +
+                routeFor('practice/' + k) +
                 '" class="skill-' +
-                k +
+                skill(k).art +
                 '"><span class="part">' +
                 partLabel(k) +
                 '</span><strong>' +
-                str(skills[k].title) +
+                str(skill(k).title) +
                 '</strong><small>' +
                 (latest
                   ? method(latest) + ' · ' + percent(latest.score)
@@ -431,11 +468,14 @@
       '</select></div><div class="log-list">' +
       (filtered.length
         ? filtered.map(row).join('')
-        : history.length
+        : records.length
           ? '<div class="empty-log">' + t('No sessions of this type yet.', '还没有这类练习记录。') + '</div>'
           : empty()) +
       '</div><p class="footnote">' +
-      t('The latest 120 sessions are kept in this browser.', '这个浏览器会保留最近 120 次练习。') +
+      t(
+        'This browser keeps the latest 120 sessions for each grade.',
+        '这个浏览器会为每个级别保留最近 120 次练习。'
+      ) +
       '</p></section>'
     );
   }
@@ -444,59 +484,14 @@
     const target = r.items.reduce((a, b) => (b.score < a.score ? b : a)).key;
     const set = canReplay(r) ? Music.makeSet(r.recipe) : null;
     function feedback(item) {
-      let detail = '';
-      if (set && item.key === 'c' && Array.isArray(item.choices)) {
-        detail = set.c.questions
-          .map((q, index) => {
-            const choice = q.options[item.choices[index]];
-            const correct = q.options[q.answer][lang];
-            const picked = choice ? choice[lang] : t('Skipped', '未答');
-            const comparison = item.choices[index] === q.answer
-              ? t('Correct. You chose ' + correct + '.', '答对了，你选的是“' + correct + '”。')
-              : t('You chose ' + picked + '. The answer is ' + correct + '.', '你选了“' + picked + '”，正确答案是“' + correct + '”。');
-            return '<p><strong>' + q.topic[lang] + '</strong><br>' + comparison + '<br>' + q.evidence[lang] + '</p>';
-          })
-          .join('');
-      } else if (set && item.key === 'd') {
-        if (Number.isFinite(item.rhythmScore)) {
-          let rhythm = t('Rhythm match ', '节奏吻合度 ') + percent(item.rhythmScore);
-          if (Number.isInteger(item.tapCount)) {
-            rhythm += t('. You tapped ' + item.tapCount + ' times for ' + set.d.notes.length + ' notes.',
-              '。片段有 ' + set.d.notes.length + ' 个起音，你拍了 ' + item.tapCount + ' 下。');
-          }
-          let metre = t('Beats per bar', '每小节拍数') + ' ' + set.d.metre;
-          if ([2,3,4].includes(item.chosenMetre)) {
-            metre = t('You chose ' + item.chosenMetre + ' beats per bar. The piece has ' + set.d.metre + '.',
-              '你选了每小节 ' + item.chosenMetre + ' 拍，曲子为每小节 ' + set.d.metre + ' 拍。');
-          }
-          detail = '<p>' + rhythm + '<br>' + metre + '</p>';
-        }
-      } else if (set && ['a', 'b'].includes(item.key) && Array.isArray(item.marks)) {
-        const names = Music.noteNames(set[item.key], r.clef);
-        const labels = {
-          ok: t('On pitch', '准确'),
-          low: t('Low', '偏低'),
-          high: t('High', '偏高'),
-          missed: t('Missed', '漏音')
-        };
-        detail =
-          '<div class="pitch-review">' +
-          item.marks
-            .slice(0, names.length)
-            .map(
-              (mark, index) =>
-                '<span>' + names[index] + ' ' + (Object.hasOwn(labels, mark) ? labels[mark] : '') + '</span>'
-            )
-            .join('') +
-          '</div>';
-      }
+      const detail = Trainer.reviewItem(item, set?.[item.key], r.clef);
       return (
         '<div class="record-item"><div class="sequence-row skill-' +
-        item.key +
+        skill(item.key).art +
         '"><span class="step-part">' +
-        skills[item.key].part +
+        skill(item.key).part +
         '</span><div><h3>' +
-        str(skills[item.key].title) +
+        str(skill(item.key).title) +
         '</h3><p>' +
         method(item) +
         '</p></div><b class="result-grade">' +
@@ -520,7 +515,11 @@
       );
     }
     return (
-      heading('SESSION REVIEW', t('Session review', '练习回顾'), testName(r) + ' · ' + day(r.date)) +
+      heading(
+        'SESSION REVIEW',
+        t('Session review', '练习回顾'),
+        gradeName() + ' · ' + testName(r) + ' · ' + day(r.date)
+      ) +
       '<div class="result-panel"><span class="result-check">' +
       icon('check') +
       '</span><div><h2>' +
@@ -559,9 +558,9 @@
       '</span><h2>' +
       t('Next practice', '下一次练习') +
       ' · ' +
-      str(skills[target].title) +
+      str(skill(target).title) +
       '</h2><p>' +
-      str(skills[target].tip) +
+      str(skill(target).tip) +
       '</p>' +
       practiceLink(target, t('Practise this skill', '练这一项')) +
       '</aside><a class="text-link" href="#studio">' +
@@ -570,27 +569,9 @@
     );
   }
   function guideContent() {
-    const scope = {
-      a: [
-        'Melodies stay within an octave and may use major or minor keys with up to three sharps or flats.',
-        '旋律音域在一个八度内，调号最多有三个升号或降号，大调和小调都可能出现。'
-      ],
-      b: [
-        'The six notes begin and end on the tonic. Major keys have at most two sharps or flats. Expect steps and thirds, with a possible rising fourth from the lower dominant to the tonic.',
-        '六音以主音开始和结束，采用最多两个升降号的大调。留意二度和三度，也可能从下方的属音向上跳四度回到主音。'
-      ],
-      c: [
-        'You will be asked about one of dynamics, articulation, tempo, tonality or character, and about the musical style and period.',
-        '第一问从力度、奏法、速度、调性或性格中取一项，第二问是风格与时期。'
-      ],
-      d: [
-        'The examiner takes a passage from the same piece and plays the melody twice without accompaniment. Clap it back, then say whether there are two, three or four beats per bar.',
-        '从前一环节的同一首曲子中截取一段，去掉伴奏，播放两遍。先拍回节奏，再说出每小节是二拍、三拍还是四拍。'
-      ]
-    };
     return (
       '<div class="dialog-head"><div>' +
-      smallLabel('ABRSM  /  GRADE 5', 'ABRSM  /  GRADE 5') +
+      smallLabel('ABRSM  /  GRADE ' + grade, 'ABRSM  /  GRADE ' + grade) +
       '<h2 id="guide-heading">' +
       t('Exam guide', '考试指南') +
       '</h2></div><button id="close-guide" class="icon-btn" type="button" aria-label="' +
@@ -604,19 +585,19 @@
         '在现场演奏考试中，考官用钢琴出听力题。你可以选择舒适的八度唱出或哼出旋律。'
       ) +
       '</p>' +
-      keys
+      skills()
         .map(
           (k) =>
             '<section class="guide-item skill-' +
-            k +
+            skill(k).art +
             '"><span class="part">' +
             partLabel(k) +
             '</span><h3>' +
-            str(skills[k].title) +
+            str(skill(k).title) +
             '</h3><p>' +
-            str(scope[k]) +
+            str(skill(k).scope) +
             '</p><p>' +
-            str(skills[k].tip) +
+            str(skill(k).tip) +
             '</p></section>'
         )
         .join('') +
@@ -628,41 +609,61 @@
       '</p>' +
       '<a class="text-link" href="' +
       syllabus +
+      '#page=' +
+      (45 + grade) +
       '" target="_blank" rel="noopener noreferrer">' +
-      t('ABRSM piano syllabus, page 49', 'ABRSM 钢琴考试大纲，第 49 页') +
+      t('ABRSM piano syllabus, page ' + (44 + grade), 'ABRSM 钢琴考试大纲，第 ' + (44 + grade) + ' 页') +
       '</a>'
     );
   }
   const isMock = (route) => route === 'mock' || route.endsWith('/mock');
-  const sessionPage = (route) =>
-    route === 'session/mock' ||
-    /^practice\/[abcd]$/.test(route) ||
-    /^repeat\/[\w-]+\/(mock|[abcd])$/.test(route);
+  function sessionPage(route) {
+    return route === 'session/mock' || route.startsWith('practice/') || route.startsWith('repeat/');
+  }
   function canReplay(record) {
     return Music.validRecipe(record?.recipe);
   }
   function render() {
     const raw = location.hash.slice(1);
-    let next =
-      sessionPage(raw) || ['mock', 'history', 'studio'].includes(raw) || raw.startsWith('result/')
-        ? raw
-        : 'studio';
-    let replay;
-    if (next.startsWith('repeat/')) {
-      replay = history.find((r) => r.id === next.split('/')[1]);
-      if (!canReplay(replay)) next = 'history';
+    const match = raw.match(/^grade\/(5|7|8)\/(.+)$/);
+    const requested = match ? match[2] : raw;
+    let level = match ? Number(match[1]) : grade;
+    const practice = requested.match(/^practice\/(\w+)$/);
+    if (!match && (practice || requested === 'session/mock')) level = 5;
+    const repeat = requested.match(/^repeat\/([\w-]+)\/(\w+)$/);
+    const result = requested.match(/^result\/([\w-]+)$/);
+    let record;
+    let next = 'studio';
+    if (repeat || result) {
+      record = history.find((r) => r.id === (repeat || result)[1]);
+      if (record) level = recordGrade(record);
+      const validTarget =
+        repeat &&
+        canReplay(record) &&
+        (repeat[2] === 'mock' ? record.mode === 'mock' : record.items.some((i) => i.key === repeat[2]));
+      next = (result && record) || validTarget ? requested : 'history';
+    } else if (
+      ['studio', 'history', 'mock', 'session/mock'].includes(requested) ||
+      (practice && findSkill(level, practice[1]))
+    ) {
+      next = requested;
     }
-    const change = page !== next;
+    const change = page !== next || level !== grade;
     if (change && sessionPage(page)) window.Trainer.stop();
+    if (grade !== level) {
+      grade = level;
+      storage.set('grade', String(grade));
+    }
     page = next;
     shell();
     if (sessionPage(page)) {
       if (change)
         window.Trainer.start({
           mode: isMock(page) ? 'mock' : 'practice',
-          key: isMock(page) ? 'a' : page.slice(-1),
-          set: replay ? Music.makeSet(replay.recipe) : undefined,
-          clef: replay?.clef === 'bass' ? 'bass' : 'treble'
+          grade,
+          key: isMock(page) ? 'a' : page.split('/').at(-1),
+          set: record ? Music.makeSet(record.recipe) : undefined,
+          clef: record?.clef === 'bass' ? 'bass' : 'treble'
         });
       else window.Trainer.refresh();
     } else {

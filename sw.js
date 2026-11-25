@@ -1,11 +1,12 @@
 const scope = self.registration.scope;
 const cachePrefix = 'aural-studio:' + scope + ':';
-const cacheName = cachePrefix + 'v1';
+const cacheName = cachePrefix + 'v2';
 const entry = new URL('index.html', scope).href;
 const files = [
   'index.html', 'manifest.webmanifest',
   'css/style.css', 'css/session.css',
   'js/app.js', 'js/session.js', 'js/input.js', 'js/audio.js', 'js/music.js', 'js/art.js',
+  'js/curriculum.js', 'js/advanced-listening.js',
   'assets/bodoni-moda-subset.woff2', 'assets/listening-studio.webp',
   'assets/icon-192.png', 'assets/icon-512.png', 'assets/icon-maskable-512.png', 'assets/apple-touch-icon.png'
 ].map(file => new URL(file, scope).href);
