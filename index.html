@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#103f36">
+  <meta name="description" content="ABRSM 钢琴五级听觉训练。练习旋律记忆、视唱、音乐听辨和节奏，完成模拟考试并查看本机练习记录。">
+  <title>听觉练习室 · Aural Studio</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/session.css">
+  <script defer src="./js/art.js"></script>
+  <script defer src="./js/music.js"></script>
+  <script defer src="./js/audio.js"></script>
+  <script defer src="./js/input.js"></script>
+  <script defer src="./js/session.js"></script>
+  <script defer src="./js/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#workspace">跳至练习内容</a>
+  <header class="masthead">
+    <div class="shell mast-inner">
+      <a class="brand" href="#studio" aria-label="Aural Studio">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span>Aural Studio</span>
+      </a>
+      <nav id="main-nav" aria-label="主导航"></nav>
+      <label class="language">
+        <span id="language-icon" aria-hidden="true"></span>
+        <select id="language" aria-label="界面语言">
+          <option value="zh" lang="zh-CN">简体中文</option>
+          <option value="en" lang="en">English</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <main class="shell" id="workspace" tabindex="-1">
+    <noscript>请启用 JavaScript 以播放音乐并开始练习。</noscript>
+  </main>
+  <footer class="shell footer"><span>Aural Studio</span><span id="footer-note"></span></footer>
+  <dialog id="guide" aria-labelledby="guide-heading"></dialog>
+</body>
+</html>

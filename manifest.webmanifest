@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "Aural Studio（听觉练习室）",
+  "short_name": "听觉练习室",
+  "description": "ABRSM 钢琴五级听力练习与模拟测试。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#103f36",
+  "background_color": "#103f36",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
